@@ -1,0 +1,15 @@
+{
+  "name": "daily-study-bot",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "morning": "node scripts/morning.js",
+    "afternoon": "node scripts/afternoon.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@slack/web-api": "^7.0.0",
+    "@upstash/redis": "^1.34.0",
+    "@vercel/functions": "^2.0.0"
+  }
+}
