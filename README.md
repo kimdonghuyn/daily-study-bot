@@ -11,6 +11,8 @@
 - **매일 08:00 KST** — AI가 백엔드 기술 질문 자동 생성 및 Slack 발송
 - **매일 13:00 KST** — AI가 모범 답안 및 핵심 개념 정리 발송
 - **실시간 피드백** — 사용자가 채널에 답변 입력 시 AI가 즉시 평가
+- **학습 기록 자동 커밋** — 질문·답변·피드백·모범답안을 `logs/YYYY-MM-DD.md`로 GitHub 자동 커밋
+- **이력 관리 레포 연동** — [`daily-study`](https://github.com/kimdonghuyn/daily-study) 레포에 XP 적립, 뱃지 해금, README 진행도 자동 업데이트
 
 ## 질문 유형
 
@@ -57,6 +59,59 @@ GitHub (logs/)
 | Scheduler | GitHub Actions (cron) |
 | Storage | Upstash Redis |
 | Messaging | Slack Web API |
+
+---
+
+## 기술적 의사결정
+
+### GitHub Actions를 스케줄러로 선택한 이유
+별도 서버 없이 크론 스케줄링이 가능하고, `workflow_dispatch`로 수동 테스트도 가능하다. Vercel Cron은 무료 티어에서 횟수 제한이 있어 Actions를 선택했다.
+
+### Vercel을 Slack 웹훅 호스팅으로 선택한 이유
+Slack Events API는 항상 켜진 엔드포인트가 필요하다. GitHub Actions는 일회성 실행이라 이벤트 수신이 불가능하다. Vercel의 `waitUntil`을 활용해 Slack의 3초 타임아웃 안에 200을 먼저 응답하고, 백그라운드에서 Claude API를 호출하는 방식으로 해결했다.
+
+```js
+// 3초 안에 응답 → 백그라운드에서 AI 처리
+waitUntil(handleMessage(event));
+return new Response(null, { status: 200 });
+```
+
+### Edge Runtime을 선택한 이유 (Node.js Runtime → 전환)
+처음엔 Node.js Runtime으로 구현했지만 Slack 서명 검증이 계속 실패했다. Vercel의 Node.js Runtime은 body를 자동 파싱해 스트림을 소진하기 때문에 원본 raw body를 다시 읽을 수 없었다. `JSON.stringify(req.body)`로 재직렬화해도 Slack이 서명에 사용한 바이트와 미묘하게 달랐다. Edge Runtime으로 전환하면 `request.text()`로 파싱 전 raw body를 직접 읽을 수 있어 서명 검증이 정확하게 동작한다.
+
+### Upstash Redis를 선택한 이유
+GitHub Actions(모닝 질문 생성)와 Vercel(사용자 답변 수신)이 서로 다른 런타임이기 때문에 공유 상태 저장소가 필요하다. Serverless 환경에 최적화된 HTTP 기반 Redis로, 별도 커넥션 관리 없이 REST API로 접근할 수 있다.
+
+### AI 엔진 선택 이력 (비용 vs 품질)
+Claude API → Gemini(무료) → Groq(무료) → Claude API 순으로 교체했다. 무료 엔진의 피드백 품질 한계를 직접 검증한 후 Claude API로 회귀했다. `lib/claude.js` 단일 파일에 AI 로직을 캡슐화해 엔진 교체 시 다른 파일 변경 없이 대응 가능하도록 설계했다.
+
+---
+
+## 학습 이력 관리 시스템
+
+매일 13:00 모범 답안 발송 이후 두 레포에 자동으로 기록이 쌓인다.
+
+**`daily-study-bot/logs/YYYY-MM-DD.md`**
+질문·답변·피드백·모범답안 전체 내용
+
+**[`daily-study`](https://github.com/kimdonghuyn/daily-study) 레포 자동 업데이트**
+
+| 파일 | 내용 |
+|------|------|
+| `profile.json` | XP·스트릭·스킬·뱃지 통계 원본 |
+| `profile.md` | 상세 프로필 (자동 재생성) |
+| `README.md` | XP 진행도 바, 스킬 레벨, 뱃지, 최근 학습 기록 |
+| `daily-log/YYYY-MM-DD.md` | 날짜별 학습 일지 |
+
+**XP 규칙**
+
+| 질문 유형 | 기본 XP | 답변 없을 시 |
+|----------|---------|------------|
+| 개념 설명 | 10 XP | 5 XP |
+| 문제 상황 | 15 XP | 10 XP |
+| 면접 질문 | 15 XP | 10 XP |
+
+스트릭 보너스: 3일 +10 XP / 7일 +30 XP / 30일 +100 XP
 
 ---
 
