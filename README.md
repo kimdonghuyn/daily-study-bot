@@ -30,16 +30,21 @@ JVM · OOP · SOLID · Spring IoC/DI/AOP · 트랜잭션 · DB 인덱스 · Redi
 
 ```
 GitHub Actions (cron)
-  ├── 08:00 KST → Claude API → 질문 생성 → Slack 발송
+  ├── 08:00 KST → Claude API → 질문 생성 → Slack 발송 → Redis 저장
   └── 13:00 KST → Claude API → 모범 답안 생성 → Slack 발송
+                → Redis에서 질문/답변/피드백 수집
+                → logs/YYYY-MM-DD.md → GitHub 커밋
 
-Vercel Serverless (api/slack.js)
+Vercel Edge Function (api/slack.js)
   └── 사용자 Slack 메시지 감지
-        → Claude API → 피드백 생성
+        → Claude API → 피드백 생성 → Redis 저장
         → Slack 스레드 응답
 
 Upstash Redis
-  └── 오늘의 질문 & 사용자 답변 임시 저장 (48시간)
+  └── 질문 / 사용자 답변 / AI 피드백 임시 저장 (48시간)
+
+GitHub (logs/)
+  └── 날짜별 학습 기록 영구 보관 (질문 · 답변 · 피드백 · 모범답안)
 ```
 
 ## 기술 스택
@@ -48,7 +53,7 @@ Upstash Redis
 |------|------|
 | Runtime | Node.js 20 (ES Modules) |
 | AI | Claude API (`claude-haiku-4-5`) |
-| Hosting | Vercel Serverless Functions |
+| Hosting | Vercel Edge Functions |
 | Scheduler | GitHub Actions (cron) |
 | Storage | Upstash Redis |
 | Messaging | Slack Web API |
@@ -114,27 +119,49 @@ Repository → Settings → Secrets and variables → Actions에 다음 추가:
 
 ## 트러블슈팅
 
-### 1. Vercel Serverless 환경에서 raw body 스트림 소진 문제
+### 1. Slack 서명 검증 실패 — raw body 재현 불가 문제 (2단계 디버깅)
 
 **문제**
-Slack 서명 검증을 위해 `getRawBody()`로 raw body를 읽으려 했으나, 함수가 타임아웃까지 응답 없이 대기.
+Slack 웹훅에서 서명 검증 실패로 401 반환. 총 두 번의 시도 끝에 해결.
 
-**원인**
-Vercel 비(非)Next.js 환경에서는 request body가 진입 시점에 이미 파싱·소진된 상태로 전달됨.
-`req.on('data', …)` 이벤트가 영구히 미발생 → 함수 무한 대기.
+**1차 시도 — `getRawBody()` 무한 대기**
 
-**해결**
-`getRawBody()` 제거, 파싱된 `req.body`를 `JSON.stringify()`로 재직렬화해 서명 생성.
+Slack 서명 검증을 위해 `getRawBody()`로 raw body를 읽으려 했으나 함수가 타임아웃까지 응답 없이 대기.
 
-```js
-// Before — 스트림 소진으로 무한 대기
-const rawBody = await getRawBody(req);
+원인: Vercel 비(非)Next.js 환경에서는 request body가 이미 파싱·소진된 상태로 전달됨.
+`req.on('data', …)` 이벤트가 영구히 미발생.
 
-// After — 이미 파싱된 body 재직렬화
-const rawBody = JSON.stringify(req.body);
-```
+임시 조치: `getRawBody()` 제거 후 `JSON.stringify(req.body)`로 재직렬화.
 
 → [커밋 `43ffc0d`](https://github.com/kimdonghuyn/daily-study-bot/commit/43ffc0dc7642471da6612e58da1faf5823ea1561)
+
+**2차 시도 — `JSON.stringify` 재직렬화도 서명 불일치**
+
+Vercel 로그로 expected/received 서명을 직접 비교한 결과 여전히 불일치 확인.
+
+```
+[slack] expected: v0=08c71b0d494c3...
+[slack] received: v0=d25e6d3712135...
+```
+
+원인: Slack이 서명에 사용한 원본 바이트와 `JSON.stringify(req.body)`의 출력이 다름.
+(key 순서, 공백, Unicode 이스케이프 등의 미세한 차이)
+
+**최종 해결 — Edge Runtime 전환**
+
+`request.text()`로 파싱 전 raw body를 직접 읽을 수 있는 Edge Runtime으로 전환.
+Node.js `crypto` 모듈 대신 Web Crypto API(`crypto.subtle`) 사용.
+
+```js
+// Node.js Runtime (실패) — 스트림 이미 소진, 재직렬화 불일치
+const rawBody = JSON.stringify(req.body);
+
+// Edge Runtime (성공) — 파싱 전 raw body 직접 획득
+const rawBody = await request.text();
+const body = JSON.parse(rawBody);
+```
+
+→ [커밋 `4945444`](https://github.com/kimdonghuyn/daily-study-bot/commit/4945444)
 
 ---
 
@@ -191,7 +218,24 @@ function splitTextBlocks(text, limit = 2900) {
 
 ---
 
-### 4. AI 엔진 교체 이력 — 비용 vs 품질 트레이드오프
+### 4. Slack 앱 권한 변경 후 이벤트 미수신
+
+**문제**
+Event Subscriptions URL이 Verified 상태임에도 사용자 메시지에 대한 이벤트가 전달되지 않음.
+
+**원인**
+OAuth 권한 스코프 변경 후 앱 재설치를 하지 않으면 Slack이 기존 토큰 기준으로 동작해 변경된 스코프가 적용 안 됨.
+Slack 대시보드 상단 노란 배너("Please reinstall your app")가 신호였으나 무시.
+
+**해결**
+Slack 앱 대시보드 → Install App → Reinstall to Workspace 실행.
+
+**교훈**
+URL 검증(Verified ✓)과 이벤트 전달은 별개. 스코프 변경 시 반드시 재설치 필요.
+
+---
+
+### 5. AI 엔진 교체 이력 — 비용 vs 품질 트레이드오프
 
 | 단계 | 엔진 | 이유 |
 |------|------|------|
