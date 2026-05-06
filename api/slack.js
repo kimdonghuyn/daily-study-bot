@@ -9,10 +9,15 @@ function verifySlackSignature(req) {
   const timestamp = req.headers['x-slack-request-timestamp'];
   const signature = req.headers['x-slack-signature'];
 
-  if (!timestamp || !signature) return false;
-  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return false;
+  if (!timestamp || !signature) {
+    console.log('[slack] missing timestamp or signature');
+    return false;
+  }
+  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) {
+    console.log('[slack] timestamp too old:', timestamp);
+    return false;
+  }
 
-  // Vercel이 body를 자동 파싱하므로 다시 직렬화해서 서명 검증
   const rawBody = JSON.stringify(req.body);
   const sigBase = `v0:${timestamp}:${rawBody}`;
   const hmac = crypto
@@ -20,11 +25,17 @@ function verifySlackSignature(req) {
     .update(sigBase)
     .digest('hex');
 
+  const expected = `v0=${hmac}`;
+  console.log('[slack] expected:', expected.slice(0, 16) + '...');
+  console.log('[slack] received:', signature.slice(0, 16) + '...');
+  console.log('[slack] secret len:', process.env.SLACK_SIGNING_SECRET?.length);
+  console.log('[slack] body preview:', rawBody.slice(0, 80));
+
   try {
-    const expected = Buffer.from(`v0=${hmac}`);
-    const received = Buffer.from(signature);
-    if (expected.length !== received.length) return false;
-    return crypto.timingSafeEqual(expected, received);
+    const expectedBuf = Buffer.from(expected);
+    const receivedBuf = Buffer.from(signature);
+    if (expectedBuf.length !== receivedBuf.length) return false;
+    return crypto.timingSafeEqual(expectedBuf, receivedBuf);
   } catch {
     return false;
   }
