@@ -112,6 +112,99 @@ Repository → Settings → Secrets and variables → Actions에 다음 추가:
 
 ---
 
+## 트러블슈팅
+
+### 1. Vercel Serverless 환경에서 raw body 스트림 소진 문제
+
+**문제**
+Slack 서명 검증을 위해 `getRawBody()`로 raw body를 읽으려 했으나, 함수가 타임아웃까지 응답 없이 대기.
+
+**원인**
+Vercel 비(非)Next.js 환경에서는 request body가 진입 시점에 이미 파싱·소진된 상태로 전달됨.
+`req.on('data', …)` 이벤트가 영구히 미발생 → 함수 무한 대기.
+
+**해결**
+`getRawBody()` 제거, 파싱된 `req.body`를 `JSON.stringify()`로 재직렬화해 서명 생성.
+
+```js
+// Before — 스트림 소진으로 무한 대기
+const rawBody = await getRawBody(req);
+
+// After — 이미 파싱된 body 재직렬화
+const rawBody = JSON.stringify(req.body);
+```
+
+→ [커밋 `43ffc0d`](https://github.com/kimdonghuyn/daily-study-bot/commit/43ffc0dc7642471da6612e58da1faf5823ea1561)
+
+---
+
+### 2. `@upstash/redis` 자동 역직렬화로 인한 JSON 이중 파싱 오류
+
+**문제**
+오후 모범 답안 워크플로우 실행 시 `SyntaxError: "[object Object]" is not valid JSON` 발생.
+
+**원인**
+`@upstash/redis`는 저장된 JSON을 자동으로 역직렬화함.
+이미 객체 상태인 값에 `JSON.parse()` 재호출 → 예외 발생.
+
+**해결**
+타입 가드로 이중 파싱 방지.
+
+```js
+// Before
+return JSON.parse(await redis.get(key));
+
+// After
+const data = await redis.get(key);
+return typeof data === 'string' ? JSON.parse(data) : data;
+```
+
+→ [커밋 `120ff20`](https://github.com/kimdonghuyn/daily-study-bot/commit/120ff2092fd629eb73291ee78260cab7f49c56dd)
+
+---
+
+### 3. Slack Block Kit 3,000자 제한으로 인한 메시지 전송 실패
+
+**문제**
+AI가 생성한 모범 답안이 Slack `section` 블록 3,000자 제한 초과 → 메시지 잘림 또는 전송 실패.
+
+**해결**
+`splitTextBlocks()` 헬퍼 구현: 줄바꿈 기준으로 2,900자 단위 분할 후 다중 블록 배열로 전송.
+
+```js
+function splitTextBlocks(text, limit = 2900) {
+  const blocks = [];
+  let remaining = text;
+  while (remaining.length > limit) {
+    const cutAt = remaining.lastIndexOf('\n', limit);
+    const splitAt = cutAt > 0 ? cutAt : limit;
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: remaining.slice(0, splitAt) } });
+    remaining = remaining.slice(splitAt).trimStart();
+  }
+  if (remaining.length > 0)
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: remaining } });
+  return blocks;
+}
+```
+
+→ [커밋 `698f7fa`](https://github.com/kimdonghuyn/daily-study-bot/commit/698f7fab40452c3e545cd3e9f4f2d1b4c7ebbf66)
+
+---
+
+### 4. AI 엔진 교체 이력 — 비용 vs 품질 트레이드오프
+
+| 단계 | 엔진 | 이유 |
+|------|------|------|
+| 초기 | Claude API | 높은 응답 품질 |
+| 변경 | Gemini API | 무료 티어 탐색 |
+| 변경 | Groq (llama-3.3-70b) | 완전 무료, 빠른 응답 |
+| 최종 | Claude API (`claude-haiku-4-5`) | 학습 피드백 정확도 우선 |
+
+무료 엔진의 한계를 직접 검증 후 품질 기준으로 회귀.
+`lib/claude.js` 단일 파일에 AI 로직 캡슐화 → 엔진 교체 시 다른 파일 무변경.
+
+---
+
 ## 프로젝트 배경
 
 백엔드 취업 준비 과정에서 꾸준한 기술 학습을 자동화하기 위해 제작했습니다.  
