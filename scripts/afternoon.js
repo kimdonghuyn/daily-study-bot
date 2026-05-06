@@ -3,6 +3,7 @@ import { generateModelAnswer } from '../lib/claude.js';
 import { getQuestion, getUserAnswer, getFeedback } from '../lib/redis.js';
 import { postModelAnswer } from '../lib/slack.js';
 import { commitDailyLog, formatDailyLog } from '../lib/github.js';
+import { updateStudyProfile } from '../lib/studyProfile.js';
 
 async function main() {
   console.log('📚 Afternoon job 시작...');
@@ -35,6 +36,18 @@ async function main() {
   });
 
   await commitDailyLog(today, content);
+
+  // daily-study 레포 XP/뱃지/README 자동 업데이트
+  await updateStudyProfile({
+    date: today,
+    topic: data.topic,
+    type: data.type,
+    typeLabel: data.typeLabel,
+    question: data.question,
+    userAnswer,
+    feedback,
+    modelAnswer: answer,
+  });
 }
 
 main().catch((err) => {
