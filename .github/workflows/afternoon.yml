@@ -5,6 +5,9 @@ on:
     - cron: '0 4 * * *'    # 04:00 UTC = 13:00 KST
   workflow_dispatch:         # 수동 실행 가능
 
+permissions:
+  contents: write
+
 jobs:
   send-answer:
     runs-on: ubuntu-latest
@@ -18,7 +21,7 @@ jobs:
 
       - run: npm ci
 
-      - name: Send model answer
+      - name: Send model answer & commit study log
         run: node scripts/afternoon.js
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -26,3 +29,4 @@ jobs:
           SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

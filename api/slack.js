@@ -1,7 +1,7 @@
 // Vercel Edge Runtime — raw body로 Slack 서명 검증 후 피드백 응답
 import { waitUntil } from '@vercel/functions';
 import { generateFeedback } from '../lib/claude.js';
-import { getQuestion, saveUserAnswer } from '../lib/redis.js';
+import { getQuestion, saveUserAnswer, saveFeedback } from '../lib/redis.js';
 
 export const config = { runtime: 'edge' };
 
@@ -63,6 +63,7 @@ async function handleMessage(event) {
 
   await saveUserAnswer(userAnswer);
   const feedback = await generateFeedback(data.question, userAnswer);
+  await saveFeedback(feedback);
   await postFeedback(event.channel, event.ts, feedback);
 }
 
