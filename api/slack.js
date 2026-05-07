@@ -3,7 +3,7 @@ import { waitUntil } from '@vercel/functions';
 import { generateFeedback, matchTopic, generateStudySummary } from '../lib/claude.js';
 import {
   getQuestion, saveUserAnswer, saveFeedback, saveAnswerScore,
-  saveStudyNote, saveTopicRequest, getCachedProfile,
+  saveStudyNote, saveStudySummary, saveTopicRequest, getCachedProfile,
 } from '../lib/redis.js';
 
 export const config = { runtime: 'edge' };
@@ -148,6 +148,7 @@ async function handleStudyCommand(event, studyNote) {
   const summary = await generateStudySummary(studyNote, topic);
 
   await saveStudyNote(studyNote);
+  await saveStudySummary(summary);
   await saveTopicRequest(topic);
   await postStudyAck(event.channel, topic, summary);
 }
