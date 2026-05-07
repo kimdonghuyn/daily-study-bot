@@ -1,6 +1,6 @@
 // 매일 13:00 KST 실행 — 모범 답안 생성, Slack 발송, GitHub 학습 기록 커밋
 import { generateModelAnswer } from '../lib/claude.js';
-import { getQuestion, getUserAnswer, getFeedback } from '../lib/redis.js';
+import { getQuestion, getUserAnswer, getFeedback, getAnswerScore } from '../lib/redis.js';
 import { postModelAnswer } from '../lib/slack.js';
 import { commitDailyLog, formatDailyLog } from '../lib/github.js';
 import { updateStudyProfile } from '../lib/studyProfile.js';
@@ -25,6 +25,7 @@ async function main() {
   const today = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().split('T')[0];
   const userAnswer = await getUserAnswer();
   const feedback = await getFeedback();
+  const answerScore = await getAnswerScore();
 
   const content = formatDailyLog({
     date: today,
@@ -44,6 +45,7 @@ async function main() {
     userAnswer,
     feedback,
     modelAnswers,
+    answerScore,
   });
 }
 
