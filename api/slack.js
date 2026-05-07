@@ -55,14 +55,14 @@ async function postFeedback(channelId, threadTs, feedback) {
 }
 
 async function handleMessage(event) {
-  const data = await getQuestion();
-  if (!data) return;
+  const questions = await getQuestion();
+  if (!questions || !Array.isArray(questions) || questions.length === 0) return;
 
   const userAnswer = event.text?.trim();
   if (!userAnswer) return;
 
   await saveUserAnswer(userAnswer);
-  const feedback = await generateFeedback(data.question, userAnswer);
+  const feedback = await generateFeedback(questions, userAnswer);
   await saveFeedback(feedback);
   await postFeedback(event.channel, event.ts, feedback);
 }

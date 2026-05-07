@@ -1,21 +1,45 @@
 // 매일 08:00 KST 실행 — 오늘의 질문 생성 및 Slack 발송
-import { generateQuestion, pickRandom, TOPIC_POOL } from '../lib/claude.js';
+import { generateDailyQuestions, pickRandom, TOPIC_POOL } from '../lib/claude.js';
 import { saveQuestion } from '../lib/redis.js';
-import { postQuestion } from '../lib/slack.js';
+import { postQuestions } from '../lib/slack.js';
 
-const TYPES = ['concept', 'problem', 'interview'];
+const LEVEL_XP = [0, 100, 250, 500, 900, 1400, 2000, 2700, 3500];
+
+async function fetchCurrentLevel() {
+  const token = process.env.STUDY_GITHUB_TOKEN;
+  if (!token) return 1;
+
+  try {
+    const res = await fetch(
+      'https://api.github.com/repos/kimdonghuyn/daily-study/contents/profile.json?ref=master',
+      { headers: { Authorization: `Bearer ${token}`, 'User-Agent': 'daily-study-bot' } }
+    );
+    if (!res.ok) return 1;
+
+    const data = await res.json();
+    const profile = JSON.parse(Buffer.from(data.content, 'base64').toString('utf-8'));
+    let level = 1;
+    for (let i = 0; i < LEVEL_XP.length; i++) {
+      if (profile.totalXP >= LEVEL_XP[i]) level = i + 1;
+      else break;
+    }
+    return level;
+  } catch {
+    return 1;
+  }
+}
 
 async function main() {
   console.log('🌅 Morning job 시작...');
 
   const topic = pickRandom(TOPIC_POOL);
-  const type  = pickRandom(TYPES);
+  const level = await fetchCurrentLevel();
 
-  console.log(`토픽: ${topic} | 유형: ${type}`);
+  console.log(`토픽: ${topic} | 레벨: Lv.${level}`);
 
-  const data = await generateQuestion(topic, type);
-  await saveQuestion(data);
-  await postQuestion(data);
+  const questions = await generateDailyQuestions(topic, level);
+  await saveQuestion(questions);
+  await postQuestions(questions);
 
   console.log('✅ 질문 발송 완료');
 }
