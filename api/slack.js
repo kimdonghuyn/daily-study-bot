@@ -54,16 +54,19 @@ async function slackPost(payload) {
 // ── 피드백 응답 ───────────────────────────────────────────────────────────────
 
 async function postFeedback(channelId, threadTs, feedback, score) {
-  const scoreBar = score != null
-    ? `\n\n📊 *정확도: ${score}점* ${score >= 80 ? '🏆' : score >= 60 ? '👍' : '📈'}`
-    : '';
+  const scoreEmoji = score >= 80 ? '🏆' : score >= 60 ? '👍' : '📈';
+  const scoreBlock = score != null
+    ? [{ type: 'section', text: { type: 'mrkdwn', text: `📊 *정확도: ${score}점* ${scoreEmoji}  _(XP 반영: 오후 1시 리포트에 적용)_` } }]
+    : [];
 
   await slackPost({
     channel: channelId,
     thread_ts: threadTs,
     blocks: [
       { type: 'header', text: { type: 'plain_text', text: '💬 답변 피드백' } },
-      { type: 'section', text: { type: 'mrkdwn', text: feedback + scoreBar } },
+      { type: 'section', text: { type: 'mrkdwn', text: feedback } },
+      { type: 'divider' },
+      ...scoreBlock,
     ],
     text: feedback,
   });
