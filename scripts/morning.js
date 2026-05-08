@@ -1,5 +1,5 @@
 // 매일 08:00 KST 실행 — 오늘의 질문 생성 및 Slack 발송
-import { generateDailyQuestion, pickRandom, TOPIC_POOL, TYPE_SEQUENCE } from '../lib/claude.js';
+import { generateDailyQuestion, TOPIC_POOL, TYPE_SEQUENCE } from '../lib/claude.js';
 import { saveQuestion, getTopicRequest, getYesterdayStudySummary } from '../lib/redis.js';
 import { postQuestions } from '../lib/slack.js';
 
@@ -37,9 +37,10 @@ async function main() {
   const type = TYPE_SEQUENCE[dayNumber % 3];
 
   const topicRequest = await getTopicRequest();
-  const topic = topicRequest ? topicRequest.trim() : pickRandom(TOPIC_POOL);
+  const roadmapTopic = TOPIC_POOL[Math.floor(dayNumber / 3) % TOPIC_POOL.length];
+  const topic = topicRequest ? topicRequest.trim() : roadmapTopic;
 
-  console.log(`토픽: ${topic} (${topicRequest ? '사용자 요청' : '랜덤'}) | 유형: ${type} | 레벨: Lv.${level}`);
+  console.log(`토픽: ${topic} (${topicRequest ? '/학습 기록' : '로드맵 순서'}) | 유형: ${type} | 레벨: Lv.${level}`);
 
   const recap = await getYesterdayStudySummary();
   const questions = await generateDailyQuestion(topic, type, level);

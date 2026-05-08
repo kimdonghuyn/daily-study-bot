@@ -83,7 +83,7 @@ async function postStudyAck(channelId, topic, summary) {
       { type: 'divider' },
       {
         type: 'context',
-        elements: [{ type: 'mrkdwn', text: `내일 아침 *"${topic}"* 관련 질문 3문제를 보내드릴게요 🌅` }],
+        elements: [{ type: 'mrkdwn', text: `내일 아침 *"${topic}"* 관련 질문 1문제를 보내드릴게요 🌅` }],
       },
     ],
     text: `오늘 학습 기록 완료! 내일 ${topic} 질문이 발송됩니다.`,
