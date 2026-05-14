@@ -2,7 +2,8 @@
 import { waitUntil } from '@vercel/functions';
 import { generateFeedback, matchTopic, generateStudySummary } from '../lib/claude.js';
 import {
-  getQuestion, saveUserAnswer, saveFeedback, saveAnswerScore,
+  getQuestion, getQuestionForDate, getYesterdayDateKST,
+  saveUserAnswer, saveFeedback, saveAnswerScore,
   saveStudyNote, saveStudySummary, saveTopicRequest, getCachedProfile,
 } from '../lib/redis.js';
 
@@ -159,7 +160,11 @@ async function handleStatusCommand(event) {
 }
 
 async function handleAnswer(event) {
-  const questions = await getQuestion();
+  // 자정 이후 답변 시 어제 질문도 fallback으로 확인
+  let questions = await getQuestion();
+  if (!questions || !Array.isArray(questions) || questions.length === 0) {
+    questions = await getQuestionForDate(getYesterdayDateKST());
+  }
   if (!questions || !Array.isArray(questions) || questions.length === 0) return;
 
   const userAnswer = event.text?.trim();
