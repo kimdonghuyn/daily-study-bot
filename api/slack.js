@@ -163,7 +163,7 @@ async function handleStatusCommand(event) {
 async function handleAnswer(event) {
   // 질문 쓰레드 댓글인지 확인 — 오늘/어제 질문 ts와 일치해야 함
   const questionTs = await getQuestionTs();
-  if (!questionTs || event.thread_ts !== questionTs) return;
+  if (!questionTs || String(event.thread_ts) !== String(questionTs)) return;
 
   let questions = await getQuestion();
   if (!questions || !Array.isArray(questions) || questions.length === 0) {
