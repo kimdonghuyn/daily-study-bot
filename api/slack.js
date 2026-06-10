@@ -3,6 +3,7 @@ import { waitUntil } from '@vercel/functions';
 import { generateFeedback, matchTopic, generateStudySummary } from '../lib/claude.js';
 import {
   getQuestion, getQuestionForDate, getYesterdayDateKST,
+  getQuestionTs,
   saveUserAnswer, saveFeedback, saveAnswerScore,
   saveStudyNote, saveStudySummary, saveTopicRequest, getCachedProfile,
 } from '../lib/redis.js';
@@ -160,7 +161,10 @@ async function handleStatusCommand(event) {
 }
 
 async function handleAnswer(event) {
-  // 자정 이후 답변 시 어제 질문도 fallback으로 확인
+  // 질문 쓰레드 댓글인지 확인 — 오늘/어제 질문 ts와 일치해야 함
+  const questionTs = await getQuestionTs();
+  if (!questionTs || event.thread_ts !== questionTs) return;
+
   let questions = await getQuestion();
   if (!questions || !Array.isArray(questions) || questions.length === 0) {
     questions = await getQuestionForDate(getYesterdayDateKST());
@@ -174,7 +178,8 @@ async function handleAnswer(event) {
   const { score, feedback } = await generateFeedback(questions, userAnswer);
   await saveFeedback(feedback);
   await saveAnswerScore(score);
-  await postFeedback(event.channel, event.ts, feedback, score);
+  // 피드백을 질문 쓰레드에 달기
+  await postFeedback(event.channel, questionTs, feedback, score);
 }
 
 // ── 메인 핸들러 ───────────────────────────────────────────────────────────────

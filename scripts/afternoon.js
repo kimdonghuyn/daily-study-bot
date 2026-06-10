@@ -1,6 +1,6 @@
 // 매일 13:00 KST 실행 — 모범 답안 생성, Slack 발송, GitHub 학습 기록 커밋
 import { generateModelAnswer } from '../lib/claude.js';
-import { getQuestion, getUserAnswer, getFeedback, getAnswerScore } from '../lib/redis.js';
+import { getQuestion, getQuestionTs, getUserAnswer, getFeedback, getAnswerScore } from '../lib/redis.js';
 import { postModelAnswer } from '../lib/slack.js';
 import { commitDailyLog, formatDailyLog } from '../lib/github.js';
 import { updateStudyProfile } from '../lib/studyProfile.js';
@@ -18,7 +18,8 @@ async function main() {
   console.log(`토픽: ${topic}`);
 
   const modelAnswers = await generateModelAnswer(questions, topic);
-  await postModelAnswer({ topic, questions, modelAnswers });
+  const threadTs = await getQuestionTs();
+  await postModelAnswer({ topic, questions, modelAnswers, threadTs });
   console.log('✅ 모범 답안 발송 완료');
 
   // KST 기준 날짜

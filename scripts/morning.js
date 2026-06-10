@@ -1,6 +1,6 @@
 // 매일 08:00 KST 실행 — 오늘의 질문 생성 및 Slack 발송
 import { generateDailyQuestion, TOPIC_POOL, TYPE_SEQUENCE, CYCLE_LENGTH } from '../lib/claude.js';
-import { saveQuestion, getTopicRequest, getYesterdayStudySummary } from '../lib/redis.js';
+import { saveQuestion, saveQuestionTs, getTopicRequest, getYesterdayStudySummary } from '../lib/redis.js';
 import { postQuestions } from '../lib/slack.js';
 
 async function fetchProfile() {
@@ -38,7 +38,8 @@ async function main() {
   const recap = await getYesterdayStudySummary();
   const questions = await generateDailyQuestion(topic, type, cycle);
   await saveQuestion(questions);
-  await postQuestions(questions, recap);
+  const questionTs = await postQuestions(questions, recap);
+  if (questionTs) await saveQuestionTs(questionTs);
 
   console.log('✅ 질문 발송 완료');
 }
