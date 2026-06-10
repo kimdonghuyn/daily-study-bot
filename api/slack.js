@@ -179,7 +179,7 @@ async function handleAnswer(event) {
   await saveFeedback(feedback);
   await saveAnswerScore(score);
   // 피드백을 질문 쓰레드에 달기
-  await postFeedback(event.channel, questionTs, feedback, score);
+  await postFeedback(event.channel, String(questionTs), feedback, score);
 }
 
 // ── 메인 핸들러 ───────────────────────────────────────────────────────────────
