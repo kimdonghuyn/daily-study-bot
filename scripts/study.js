@@ -1,6 +1,7 @@
 // 오늘의 학습 가이드 출력 — 주제·목표·설명을 Claude가 생성
 import { generateStudyGuide } from '../lib/claude.js';
 import { TOPIC_POOL, TYPE_SEQUENCE, CYCLE_LENGTH } from '../lib/topics.js';
+import { getYesterdayStudySummary } from '../lib/redis.js';
 
 const OWNER = 'kimdonghuyn';
 const TYPE_LABELS_KR = { concept: '📖 개념 설명', problem: '🔧 문제 상황', interview: '🎤 면접 질문' };
@@ -35,6 +36,14 @@ async function main() {
   console.log(`  토픽: ${topic}`);
   console.log(`  유형: ${TYPE_LABELS_KR[type]}`);
   console.log('─'.repeat(52));
+  // 어제 학습 요약 출력
+  const recap = await getYesterdayStudySummary();
+  if (recap) {
+    console.log('  📝 어제 학습 복습\n');
+    console.log(recap);
+    console.log('\n' + '─'.repeat(52) + '\n');
+  }
+
   console.log('  학습 가이드 생성 중...\n');
 
   const guide = await generateStudyGuide(topic, type, cycle);
