@@ -3,29 +3,41 @@ import { generateDailyQuestion, TOPIC_POOL, TYPE_SEQUENCE, CYCLE_LENGTH } from '
 import { saveQuestion, saveQuestionTs, getTopicRequest, getYesterdayStudySummary } from '../lib/redis.js';
 import { postQuestions } from '../lib/slack.js';
 
+function getYesterdayKST() {
+  const kst = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  kst.setDate(kst.getDate() - 1);
+  return kst.toISOString().slice(0, 10);
+}
+
 async function fetchProfile() {
   const token = process.env.STUDY_GITHUB_TOKEN;
-  if (!token) return { dayNumber: 0 };
+  if (!token) return { dayNumber: 0, lastStudyDate: null };
 
   try {
     const res = await fetch(
       'https://api.github.com/repos/kimdonghuyn/daily-study/contents/profile.json?ref=master',
       { headers: { Authorization: `Bearer ${token}`, 'User-Agent': 'daily-study-bot' } }
     );
-    if (!res.ok) return { dayNumber: 0 };
+    if (!res.ok) return { dayNumber: 0, lastStudyDate: null };
 
     const data = await res.json();
     const profile = JSON.parse(Buffer.from(data.content, 'base64').toString('utf-8'));
-    return { dayNumber: profile.dayNumber || 0 };
+    return { dayNumber: profile.dayNumber || 0, lastStudyDate: profile.lastStudyDate || null };
   } catch {
-    return { dayNumber: 0 };
+    return { dayNumber: 0, lastStudyDate: null };
   }
 }
 
 async function main() {
   console.log('🌅 Morning job 시작...');
 
-  const { dayNumber } = await fetchProfile();
+  const { dayNumber, lastStudyDate } = await fetchProfile();
+
+  const yesterday = getYesterdayKST();
+  if (lastStudyDate !== yesterday) {
+    console.log(`⏭️ 어제(${yesterday}) 학습 기록 없음 (lastStudyDate: ${lastStudyDate}) — 슬랙 발송 스킵`);
+    return;
+  }
   const cycle = Math.floor(dayNumber / CYCLE_LENGTH);
   const type = TYPE_SEQUENCE[dayNumber % 3];
 
